@@ -61,7 +61,13 @@ export const uploadImageToHosting = async ({
       type: contentType,
     });
 
-    await puter.fs.mkdir(dir, { createMissingParents: true });
+    try {
+      await puter.fs.mkdir(dir, { createMissingParents: true });
+    } catch (error) {
+      // Saving a render reuses the directory created for its source image.
+      const existing = await puter.fs.stat(dir);
+      if (!existing.isDir) throw error;
+    }
     await puter.fs.write(filePath, uploadFile);
 
     const hostedUrl = getHostedUrl({ subdomain: hosting.subdomain }, filePath);
