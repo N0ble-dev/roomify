@@ -1,65 +1,58 @@
 ﻿# Roomify
 
-**From 2D floor plans to photorealistic 3D interiors.**
+**Turn 2D floor plans into photorealistic interior visualizations.**
 
-Roomify is an interior design SaaS project focused on turning flat floor plans into compelling visualizations of finished spaces. Its goal is to help interior designers, architects, real estate professionals, and homeowners communicate design ideas and explore how a space could look before bringing it to life.
+Roomify is an interior design SaaS project for exploring how a space could look before it is built. Upload a floor plan, generate an AI interpretation of its interior, compare the result with the original, and return to saved projects.
 
-The planned rendering pipeline uses serverless workers to process generation tasks independently of the web application.
+> **Status:** In active development. Authentication, uploads, image generation, comparison, export, and project persistence are implemented. Running the complete workflow requires a Puter account, a deployed project worker, and access to the selected image model.
 
-> **Project status:** Early development. This repository currently contains the React application foundation, shared UI components, styling, and Docker configuration. Floor plan uploads, photorealistic rendering, and serverless worker integration are planned capabilities.
+## Features
 
-## Product Vision
+- **Floor plan uploads** — Select or drag and drop JPG and PNG images up to 10 MiB. Upload processing requires sign-in.
+- **AI interior rendering** — Send the source image and architectural rendering prompt to Puter's image-to-image API. The default model is `gemini-3.1-flash-image`, requested at a square aspect ratio and `1K` quality.
+- **Before-and-after comparison** — Compare the source plan with the generated render using an interactive slider.
+- **Regeneration and recovery** — Retry failed requests, regenerate an existing design, and reload projects when loading fails.
+- **Project history** — Store project records through a serverless worker and reopen them from the home page.
+- **Hosted assets and export** — Store source images and renders through Puter, and export the current render from the visualizer.
+- **Application feedback** — Themed success, notice, and error notifications with keyboard dismissal, paused timers, and reduced-motion support.
 
-- **2D-to-3D visualization** — Transform floor plans into three-dimensional interior imagery that makes layouts easier to understand.
-- **Photorealistic rendering** — Generate interior visuals that convey materials, lighting, and the atmosphere of a space.
-- **Serverless processing** — Run rendering jobs in background workers so the application can stay responsive during generation.
-- **A guided design workflow** — Bring plan submission, generation progress, and result review into one experience.
+## How It Works
 
-These capabilities describe the intended product; the end-to-end workflow is not yet implemented.
+1. Sign in with a Puter account.
+2. Upload a JPG or PNG floor plan.
+3. Roomify hosts the source image and saves a project record.
+4. The visualizer loads the project and requests an AI render when one does not already exist.
+5. The generated image appears in the preview and comparison slider, then is hosted and saved back to the project.
+6. Export the result or choose **Regenerate** to request another interpretation.
 
-## Planned Workflow
+If saving a generated image fails, the preview remains available for export and a notice explains that it was not saved. The upload progress indicator represents local file preparation; it is not progress reported by the AI provider.
 
-1. **Submit a floor plan.** Provide a 2D layout as the starting point for a visualization.
-2. **Request a render.** Send the plan to the processing pipeline.
-3. **Generate the visualization.** A serverless worker handles the rendering task in the background.
-4. **Review the result.** View the generated interior visualization in the application.
+## Architecture
 
-The intended processing flow is:
-
-```text
-2D Floor Plan
-      |
-      v
-Roomify Web App
-      |
-      v
-Render Job Submission
-      |
-      v
-Serverless Worker --> Rendering Service
-      |
-      v
-Generated Image Storage
-      |
-      v
-Result Preview
+```mermaid
+flowchart LR
+    Web[Roomify web app] --> Auth[Puter authentication]
+    Web --> AI[Puter AI image generation]
+    Web --> Assets[Puter file storage and hosting]
+    Web --> Worker[Project worker]
+    Worker --> KV[Authenticated user key-value storage]
 ```
 
-The worker runtime, rendering provider, job coordination, and storage integration have not yet been configured in this repository.
+The browser requests image generation through the Puter SDK. The serverless worker handles project records: saving, listing, and retrieving them. A separate background rendering queue is not implemented.
 
 ## Technology Stack
 
-| Layer | Technology |
+| Area | Technology |
 | --- | --- |
-| User interface | React 19 |
-| Application framework | React Router 8 with server-side rendering enabled |
-| Language | TypeScript 5 |
+| Interface | React 19 and TypeScript 5 |
+| Application framework | React Router 8, with server-side rendering enabled |
 | Styling | Tailwind CSS 4 |
 | Development and builds | Vite 8 |
 | Icons | Lucide React |
-| Application runtime | Node.js |
-| Containerization | Docker with a multi-stage Node.js 24 Alpine build |
-| Background rendering | Planned serverless workers |
+| Image comparison | React Compare Slider |
+| Authentication, AI, storage, and workers | Puter.js |
+| Web application runtime | Node.js |
+| Containerization | Multi-stage Docker build using Node.js 24 Alpine |
 
 ## Getting Started
 
@@ -67,44 +60,69 @@ The worker runtime, rendering provider, job coordination, and storage integratio
 
 - Node.js 24, matching the included Docker image.
 - npm.
+- A Puter account with access to image generation and sufficient allowance.
+- A deployed instance of the project worker described below.
 
-### Install and Run
+### Install Dependencies
 
-From the project directory, install the locked dependencies:
+From the project directory:
 
 ```bash
 npm ci
 ```
 
-Start the development server:
+### Deploy the Project Worker
+
+Deploy [lib/puter.worker.js](lib/puter.worker.js) in Puter's worker environment using the [Puter worker deployment API](https://docs.puter.com/Workers/create/). The source relies on Puter's `router` and authenticated `user.puter` context.
+
+The worker provides these routes:
+
+| Method | Route | Purpose |
+| --- | --- | --- |
+| `POST` | `/api/projects/save` | Save a project containing an ID and hosted source image. |
+| `GET` | `/api/projects/list` | List project records from the authenticated user's storage. |
+| `GET` | `/api/projects/get?id=<project-id>` | Retrieve a project by ID. |
+
+Use the deployed worker's base URL in the configuration below. Deploying the web application does not deploy this worker.
+
+### Configure the Environment
+
+Create `.env.local` in the project root:
+
+```dotenv
+VITE_PUTER_WORKER_URL=https://your-worker-url
+VITE_AI_IMAGE_MODEL=gemini-3.1-flash-image
+```
+
+Replace `https://your-worker-url` with the worker's base URL, without an `/api/projects/...` suffix.
+
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `VITE_PUTER_WORKER_URL` | Yes, for uploads and project history | Base URL of the deployed project worker. |
+| `VITE_AI_IMAGE_MODEL` | No | Image-to-image model ID. Defaults to `gemini-3.1-flash-image`. |
+
+Puter manages account authentication; a provider API key is not required in the frontend. Generation uses the signed-in user's Puter allowance. For supported model IDs and image options, see the [Puter image generation documentation](https://docs.puter.com/AI/txt2img/).
+
+`.env.local` is excluded from Git. `VITE_` variables are public client configuration and are embedded during the build, so use them for the worker URL and model ID rather than secrets. Restart development after changes and rebuild production bundles to apply them. See [Vite environment variables](https://vite.dev/guide/env-and-mode).
+
+### Start Development
 
 ```bash
 npm run dev
 ```
 
-Open [http://localhost:5173](http://localhost:5173). If that port is occupied, use the address printed in the terminal.
-
-The home page includes floor plan uploads and project history. Rendering requires a signed-in Puter account and a configured project worker.
-
-### Configuration
-
-Configure the app in `.env.local` with the deployed project worker URL and image model:
-
-| Variable | Purpose |
-| --- | --- |
-| `VITE_PUTER_WORKER_URL` | URL of the deployed Puter worker that saves and loads projects. |
-| `VITE_AI_IMAGE_MODEL` | Image-to-image model ID. Defaults to `gemini-3.1-flash-image`. |
-
-Restart the development server after changing these values. Puter manages authentication; no provider API key is required in the frontend. Image generation uses the signed-in user's Puter allowance.
+Open [http://localhost:5173](http://localhost:5173), or the address printed in the terminal, then sign in and upload a floor plan.
 
 ## Available Commands
 
 | Command | Purpose |
 | --- | --- |
-| `npm run dev` | Start the development server with hot module replacement. |
-| `npm run build` | Create the production client and server bundles. |
-| `npm start` | Serve the production build. Requires a successful build first. |
-| `npm run typecheck` | Generate React Router types and run the TypeScript compiler. |
+| `npm run dev` | Start the development server. |
+| `npm run typecheck` | Generate route types and run the TypeScript compiler. |
+| `npm run build` | Build the production client and server bundles. |
+| `npm start` | Serve an existing production build. |
+
+Run `npm run typecheck` and `npm run build` before submitting changes. There is currently no committed automated test suite or `npm test` script.
 
 ## Project Structure
 
@@ -112,59 +130,69 @@ Restart the development server after changing these values. Puter manages authen
 roomify/
 |-- app/
 |   |-- routes/
-|   |   `-- home.tsx          # Home route placeholder
-|   |-- app.css              # Theme, global styles, and component styles
-|   |-- root.tsx             # Document layout and route error boundary
-|   `-- routes.ts            # Route definitions
+|   |   |-- home.tsx                 # Landing page, uploads, and project history
+|   |   `-- vizsualizer.$id.tsx      # Render generation, comparison, and export
+|   |-- app.css                     # Theme and component styles
+|   |-- root.tsx                    # Document layout, auth state, and toasts
+|   `-- routes.ts                   # Route definitions
 |-- components/
-|   |-- ui/
-|   |   `-- Button.tsx       # Shared button component
-|   `-- Navbar.tsx           # Navigation component with authentication hooks
-|-- public/                  # Static assets
-|-- Dockerfile               # Multi-stage application image
-|-- package.json             # Dependencies and npm scripts
-|-- react-router.config.ts   # Framework configuration
-|-- tsconfig.json            # TypeScript configuration
-`-- vite.config.ts           # Build and styling plugins
+|   |-- toasts/                     # Notification store, provider, and helpers
+|   |-- ui/Button.tsx               # Shared button component
+|   |-- Navbar.tsx                  # Navigation and authentication controls
+|   `-- Upload.tsx                  # File reading, validation, and progress
+|-- lib/
+|   |-- ai.action.ts                # Image-to-image generation and image reading
+|   |-- constants.ts                # Configuration, timing, and rendering prompt
+|   |-- puter.action.ts             # Authentication and project actions
+|   |-- puter.hosting.ts            # Hosting configuration and asset storage
+|   |-- puter.worker.js             # Serverless project API
+|   `-- utils.ts                    # Image, URL, and error helpers
+|-- public/                         # Static assets
+|-- Dockerfile                      # Web application image
+|-- package.json                    # Dependencies and scripts
+`-- type.d.ts                       # Shared application types
 ```
 
 ## Production Deployment
 
-### Node.js
+Configure the public environment values before building. Changes made only to a running server's environment do not update an already-built frontend.
 
-Build the application, then start the production server:
+### Node.js
 
 ```bash
 npm run build
 npm start
 ```
 
-The build produces static assets in `build/client` and server code in `build/server`. The start script serves the application using `build/server/index.js`.
+The build produces static assets in `build/client` and server code in `build/server`. The start script serves `build/server/index.js`.
 
 ### Docker
 
-Build the included application image:
+The Dockerfile builds the application inside the image. Ensure the intended public configuration is available during that build, for example through the local `.env.local` in the build context.
 
 ```bash
 docker build -t roomify .
-```
-
-Run the container:
-
-```bash
 docker run --rm -p 3000:3000 roomify
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+Open [http://localhost:3000](http://localhost:3000). The project worker remains a separate deployment in Puter.
 
-This image packages the web application. Serverless rendering workers will require their own deployment configuration when implemented.
+## Troubleshooting
 
-## Roadmap
+| Symptom | What to check |
+| --- | --- |
+| Upload does not start | Sign in, then select a JPG or PNG no larger than 10 MiB. |
+| A project cannot be saved or loaded | Check `VITE_PUTER_WORKER_URL`, worker deployment, and account authentication. |
+| `400` with `Model not found` | Choose a currently supported image model in `.env.local`; restart or rebuild the app. |
+| Only the original image is visible | Read the visualizer's error message, resolve the reported issue, then choose **Try again**. |
+| A render appears but is not saved | Check storage access and hosting, and export the preview before leaving the page. |
+| Configuration changes have no effect | Restart development or create a new production build. |
 
-- [ ] Build the landing page and floor plan upload experience.
-- [ ] Complete authentication and connect it to the application.
-- [ ] Integrate a rendering provider for 2D-to-3D interior visualization.
-- [ ] Implement serverless workers for background rendering jobs.
-- [ ] Add job status updates and generation error handling.
-- [ ] Store source plans and generated visualizations.
-- [ ] Build a result preview and project history experience.
+For a failed service request, inspect its Network response body as well as its status code. Keep authentication tokens out of logs and bug reports.
+
+## Current Limits and Roadmap
+
+- Outputs are raster visualizations. Editable 3D models and CAD export are not implemented.
+- **Share** and **Watch Demo** are placeholder controls.
+- Project sharing and visibility enforcement remain unfinished; image assets use public hosting URLs.
+- Durable background rendering jobs, billing, and a committed automated test suite remain future work.
