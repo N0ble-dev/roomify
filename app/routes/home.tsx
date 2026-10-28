@@ -1,9 +1,11 @@
-import { Navigate, useNavigate } from "react-router";
+import { Navigate, useNavigate, useOutletContext } from "react-router";
 import Navbar from "../../components/Navbar";
 import Button from "../../components/ui/Button";
 import type { Route } from "./+types/home";
 import { ArrowRight, ArrowUpRight, Clock, Layers } from "lucide-react";
 import Upload from "../../components/Upload";
+import { createProject, getProjects } from "../../lib/puter.action";
+import { useEffect, useRef, useState } from "react";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -18,11 +20,61 @@ export function meta({}: Route.MetaArgs) {
 
 export default function Home() {
   const navigate = useNavigate();
-  const handleUploadComplete = (base64Data: string) => {
-    const newId = Date.now().toString();
-    navigate(`/vizsualizer/${newId}`, { state: { base64Data } });
-    return true;
+  const { userName } = useOutletContext<AuthContext>();
+  const [projects, setProjects] = useState<DesignItem[]>([]);
+  const isCreatingProjectRef = useRef(false);
+
+  const handleUploadComplete = async (base64Image: string) => {
+    try {
+      if (isCreatingProjectRef.current) return false;
+      isCreatingProjectRef.current = true;
+      const newId = Date.now().toString();
+      const name = `Residence ${newId}`;
+
+      const newItem = {
+        id: newId,
+        name,
+        sourceImage: base64Image,
+        renderedImage: undefined,
+        timestamp: Date.now(),
+      };
+
+      const saved = await createProject({
+        item: newItem,
+        visibility: "private",
+      });
+
+      if (!saved) {
+        console.error("Failed to create project");
+        return false;
+      }
+
+      setProjects((prev) => [saved, ...prev]);
+
+      navigate(`/vizsualizer/${newId}`, {
+        state: {
+          initialImage: saved.sourceImage,
+          initialRendered: saved.renderedImage || null,
+          name,
+        },
+      });
+
+      return true;
+    } finally {
+      isCreatingProjectRef.current = false;
+    }
   };
+
+  useEffect(() => {
+    const fetchProjects = async () => {
+      const items = await getProjects();
+
+      setProjects(items);
+    };
+
+    fetchProjects();
+  }, []);
+
   return (
     <div className="home">
       <Navbar />
@@ -70,7 +122,7 @@ export default function Home() {
           </div>
         </div>
       </section>
-      {/* <section className="projects">
+      <section className="projects">
         <div className="section-inner">
           <div className="section-head">
             <div className="copy">
@@ -88,7 +140,7 @@ export default function Home() {
                 <div
                   key={id}
                   className="project-card group"
-                  onClick={() => Navigate(`/visualizer/${id}`)}
+                  onClick={() => navigate(`/vizsualizer/${id}`)}
                 >
                   <div className="preview">
                     <img src={renderedImage || sourceImage} alt="Project" />
@@ -105,7 +157,7 @@ export default function Home() {
                       <div className="meta">
                         <Clock size={12} />
                         <span>{new Date(timestamp).toLocaleDateString()}</span>
-                        <span>By JS Mastery</span>
+                        <span>By {userName || "you"}</span>
                       </div>
                     </div>
                     <div className="arrow">
@@ -117,7 +169,7 @@ export default function Home() {
             )}
           </div>
         </div>
-      </section>  */}
+      </section>
     </div>
   );
 }
