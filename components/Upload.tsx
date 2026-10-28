@@ -34,10 +34,16 @@ const Upload = ({ onComplete }: UploadProps) => {
   signedInRef.current = isSignedIn;
   onCompleteRef.current = onComplete;
 
-  const cancelUpload = useCallback(() => {
-    if (intervalRef.current !== null) clearInterval(intervalRef.current);
-    if (timeoutRef.current !== null) clearTimeout(timeoutRef.current);
+  const clearProgressInterval = useCallback(() => {
+    if (intervalRef.current === null) return;
+
+    clearInterval(intervalRef.current);
     intervalRef.current = null;
+  }, []);
+
+  const cancelUpload = useCallback(() => {
+    clearProgressInterval();
+    if (timeoutRef.current !== null) clearTimeout(timeoutRef.current);
     timeoutRef.current = null;
 
     const reader = readerRef.current;
@@ -47,7 +53,7 @@ const Upload = ({ onComplete }: UploadProps) => {
       reader.onerror = null;
       if (reader.readyState === FileReader.LOADING) reader.abort();
     }
-  }, []);
+  }, [clearProgressInterval]);
 
   useEffect(() => {
     if (!isSignedIn) {
@@ -121,8 +127,7 @@ const Upload = ({ onComplete }: UploadProps) => {
         setProgress(currentProgress);
 
         if (currentProgress === 100) {
-          clearInterval(intervalRef.current!);
-          intervalRef.current = null;
+          clearProgressInterval();
           timeoutRef.current = setTimeout(async () => {
             timeoutRef.current = null;
             if (!signedInRef.current) return;
