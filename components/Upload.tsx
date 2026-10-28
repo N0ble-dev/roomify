@@ -14,6 +14,9 @@ import {
   PROGRESS_STEP,
   REDIRECT_DELAY_MS,
 } from "../lib/constants";
+import { useSuccessToast } from "./toasts/SuccessToast";
+import { useNoticeToast } from "./toasts/NoticeToast";
+import { useErrorToast } from "./toasts/ErrorToast";
 
 interface UploadProps {
   onComplete: (base64: string) => void;
@@ -25,6 +28,15 @@ const Upload = ({ onComplete }: UploadProps) => {
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const { isLoggedIn: isSignedIn } = useOutletContext<AuthContext>();
+  const { showToast: showSuccess } = useSuccessToast();
+  const { showToast: showNotice } = useNoticeToast();
+  const { showToast: showError } = useErrorToast();
+
+  const showUploadError = (message: string) => {
+    setError(message);
+    showError(message);
+  };
+
   const signedInRef = useRef(isSignedIn);
   const onCompleteRef = useRef(onComplete);
   const readerRef = useRef<FileReader | null>(null);
@@ -79,12 +91,12 @@ const Upload = ({ onComplete }: UploadProps) => {
     }
 
     if (!["image/png", "image/jpeg"].includes(selectedFile.type)) {
-      setError("Please choose a JPG or PNG image.");
+      showUploadError("Please choose a JPG or PNG image.");
       return;
     }
 
     if (selectedFile.size > 10 * 1024 * 1024) {
-      setError("Please choose an image smaller than 10 MB.");
+      showUploadError("Please choose an image smaller than 10 MB.");
       return;
     }
 
@@ -100,7 +112,7 @@ const Upload = ({ onComplete }: UploadProps) => {
       if (!signedInRef.current) return;
       setFile(null);
       setProgress(0);
-      setError("We couldn't read this image. Please try another file.");
+      showUploadError("We couldn't read this image. Please try another file.");
     };
 
     reader.onerror = handleReadError;
@@ -133,11 +145,12 @@ const Upload = ({ onComplete }: UploadProps) => {
             if (!signedInRef.current) return;
             try {
               await onCompleteRef.current(base64);
+              if (signedInRef.current) showSuccess("Your floor plan is ready.");
             } catch {
               if (!signedInRef.current) return;
               setFile(null);
               setProgress(0);
-              setError(
+              showUploadError(
                 "We couldn't continue with this image. Please try again.",
               );
             }
@@ -184,7 +197,10 @@ const Upload = ({ onComplete }: UploadProps) => {
 
   const handleDrop = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
-    if (!isSignedIn) return;
+    if (!isSignedIn) {
+      showNotice("Sign in to upload a floor plan.");
+      return;
+    }
     setIsDragging(false);
     const selectedFile = event.dataTransfer.files[0];
     if (selectedFile) processFile(selectedFile);
@@ -207,6 +223,8 @@ const Upload = ({ onComplete }: UploadProps) => {
             disabled={!isSignedIn}
             onChange={handleChange}
             aria-label="Upload a floor plan"
+            aria-invalid={Boolean(error)}
+            aria-describedby={error ? "upload-error" : undefined}
           />
           <div className="drop-content">
             <div className="drop-icon">
@@ -247,7 +265,7 @@ const Upload = ({ onComplete }: UploadProps) => {
         </div>
       )}
       {error && (
-        <p role="alert" className="mt-3 text-sm text-red-700">
+        <p id="upload-error" className="mt-3 text-sm text-danger">
           {error}
         </p>
       )}
