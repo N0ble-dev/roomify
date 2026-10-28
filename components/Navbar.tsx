@@ -1,26 +1,45 @@
 import { Box } from "lucide-react";
 import Button from "./ui/Button";
 import { useOutletContext } from "react-router";
+import { useState } from "react";
+import { useSuccessToast } from "./toasts/SuccessToast";
+import { useNoticeToast } from "./toasts/NoticeToast";
+import { useErrorToast } from "./toasts/ErrorToast";
 
 const Navbar = () => {
   const { isLoggedIn, userName, signIn, signOut } =
     useOutletContext<AuthContext>();
-  const isLoading = false; // Placeholder for loading state, you can implement your own logic
-  const handleAuthClick = async () => {
-    if (isLoggedIn) {
-      try {
-        await signOut();
-      } catch (e) {
-        console.error(`Puter sign out failed: ${e}`);
-      }
+  const [isLoading, setIsLoading] = useState(false);
+  const { showToast: showSuccess } = useSuccessToast();
+  const { showToast: showNotice } = useNoticeToast();
+  const { showToast: showError } = useErrorToast();
 
-      return;
-    }
+  const handleAuthClick = async () => {
+    if (isLoading) return;
+    setIsLoading(true);
 
     try {
-      await signIn();
-    } catch (e) {
-      console.error(`Puter sign in failed: ${e}`);
+      if (isLoggedIn) {
+        await signOut();
+        showNotice("You have been signed out.");
+        return;
+      }
+
+      const user = await signIn();
+      if (!user) {
+        showError("We couldn't finish signing you in. Please try again.");
+        return;
+      }
+      showSuccess("You're signed in.");
+    } catch (error) {
+      console.error("Authentication failed:", error);
+      showError(
+        isLoggedIn
+          ? "We couldn't sign you out. Please try again."
+          : "Sign-in didn't finish. Please try again.",
+      );
+    } finally {
+      setIsLoading(false);
     }
   };
 

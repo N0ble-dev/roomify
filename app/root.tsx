@@ -13,6 +13,7 @@ import { useEffect, useState } from "react";
 import { getCurrentUser } from "../lib/puter.action";
 import { signIn as puterSignIn } from "./../lib/puter.action";
 import { signOut as puterSignOut } from "./../lib/puter.action";
+import { ToastProvider } from "../components/toasts/ToastProvider";
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -38,6 +39,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </head>
       <body>
         {children}
+        <ToastProvider />
         <ScrollRestoration />
         <Scripts />
       </body>
