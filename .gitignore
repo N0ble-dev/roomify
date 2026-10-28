@@ -1,0 +1,13 @@
+.DS_Store
+.env
+.env.*
+!.env.example
+/node_modules/
+
+# Local agent configuration
+/.agents/
+/.codex/
+
+# React Router
+/.react-router/
+/build/
