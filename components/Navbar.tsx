@@ -2,19 +2,12 @@ import { Box } from "lucide-react";
 import Button from "./ui/Button";
 import { useOutletContext } from "react-router";
 
-interface AuthContext {
-  isSignedIn: boolean;
-  userName?: string | null;
-  signIn: () => Promise<unknown>;
-  signOut: () => Promise<unknown>;
-}
-
 const Navbar = () => {
-  const { isSignedIn, userName, signIn, signOut } =
+  const { isLoggedIn, userName, signIn, signOut } =
     useOutletContext<AuthContext>();
-
+  const isLoading = false; // Placeholder for loading state, you can implement your own logic
   const handleAuthClick = async () => {
-    if (isSignedIn) {
+    if (isLoggedIn) {
       try {
         await signOut();
       } catch (e) {
@@ -50,20 +43,32 @@ const Navbar = () => {
         </div>
 
         <div className="actions">
-          {isSignedIn ? (
+          {isLoggedIn ? (
             <>
               <span className="greeting">
                 {userName ? `Hi, ${userName}` : "Signed in"}
               </span>
 
-              <Button size="sm" onClick={handleAuthClick} className="btn">
-                Log Out
+              <Button
+                size="sm"
+                onClick={handleAuthClick}
+                className="btn"
+                disabled={isLoading}
+                aria-busy={isLoading}
+              >
+                {isLoading ? "Please wait..." : "Log Out"}
               </Button>
             </>
           ) : (
             <>
-              <Button onClick={handleAuthClick} size="sm" variant="ghost">
-                Log In
+              <Button
+                onClick={handleAuthClick}
+                size="sm"
+                variant="ghost"
+                disabled={isLoading}
+                aria-busy={isLoading}
+              >
+                {isLoading ? "Please wait..." : "Log In"}
               </Button>
 
               <a href="#upload" className="cta">

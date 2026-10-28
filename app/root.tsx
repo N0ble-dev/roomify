@@ -9,6 +9,10 @@ import {
 
 import type { Route } from "./+types/root";
 import "./app.css";
+import { useEffect, useState } from "react";
+import { getCurrentUser } from "../lib/puter.action";
+import { signIn as puterSignIn } from "./../lib/puter.action";
+import { signOut as puterSignOut } from "./../lib/puter.action";
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -40,9 +44,51 @@ export function Layout({ children }: { children: React.ReactNode }) {
     </html>
   );
 }
-
+const DEFAULT_AUTH_STATE: AuthState = {
+  isLoggedIn: false,
+  userName: null,
+  userEmail: null,
+  userId: null,
+};
 export default function App() {
-  return <Outlet />;
+  const [authState, setAuthState] = useState<AuthState>(DEFAULT_AUTH_STATE);
+  const refreshAuth = async () => {
+    try {
+      const user = await getCurrentUser();
+      if (user) {
+        setAuthState({
+          isLoggedIn: true,
+          userName: user?.username || null,
+          userId: user?.uuid || null,
+        });
+        return user;
+      }
+
+      setAuthState(DEFAULT_AUTH_STATE);
+      return false;
+    } catch (error) {
+      console.error("Error refreshing authentication:", error);
+      setAuthState(DEFAULT_AUTH_STATE);
+      return false;
+    }
+  };
+  useEffect(() => {
+    refreshAuth();
+  }, []);
+  const signIn = async () => {
+    await puterSignIn();
+    return await refreshAuth();
+  };
+  const signOut = async () => {
+    puterSignOut();
+    setAuthState(DEFAULT_AUTH_STATE);
+    return false;
+  };
+  return (
+    <main className="min-h-screen bg-background text-foreground relative z-10">
+      <Outlet context={{ ...authState, signIn, signOut, refreshAuth }} />
+    </main>
+  );
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
