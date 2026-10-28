@@ -8,19 +8,39 @@ import {
   ReactCompareSliderImage,
 } from "react-compare-slider";
 import { generate3DView } from "../../lib/ai.action";
+import { getErrorMessage } from "../../lib/utils";
+import { useErrorToast } from "../../components/toasts/ErrorToast";
+import { useNoticeToast } from "../../components/toasts/NoticeToast";
 
 const VisualizerId = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { userId } = useOutletContext<AuthContext>();
+  const { showToast: showError } = useErrorToast();
+  const { showToast: showNotice } = useNoticeToast();
 
   const hasInitialGenerated = useRef(false);
+  const generationRequestRef = useRef<{
+    projectId: string;
+    canceled: boolean;
+  } | null>(null);
 
   const [project, setProject] = useState<DesignItem | null>(null);
   const [isProjectLoading, setIsProjectLoading] = useState(true);
 
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentImage, setCurrentImage] = useState<string | null>(null);
+  const [generationError, setGenerationError] = useState<string | null>(null);
+  const [projectError, setProjectError] = useState<string | null>(null);
+  const [reloadAttempt, setReloadAttempt] = useState(0);
+
+  useEffect(() => {
+    return () => {
+      if (generationRequestRef.current) {
+        generationRequestRef.current.canceled = true;
+      }
+    };
+  }, [id]);
 
   const handleBack = () => navigate("/");
   const handleExport = () => {
@@ -35,11 +55,22 @@ const VisualizerId = () => {
   };
 
   const runGeneration = async (item: DesignItem) => {
-    if (!id || !item.sourceImage) return;
+    if (!id || item.id !== id || !item.sourceImage) return;
+    if (
+      generationRequestRef.current?.projectId === id &&
+      !generationRequestRef.current.canceled
+    ) {
+      return;
+    }
+
+    const request = { projectId: id, canceled: false };
+    generationRequestRef.current = request;
+    setGenerationError(null);
+    setIsProcessing(true);
 
     try {
-      setIsProcessing(true);
       const result = await generate3DView({ sourceImage: item.sourceImage });
+      if (request.canceled) return;
 
       if (result.renderedImage) {
         setCurrentImage(result.renderedImage);
@@ -52,21 +83,47 @@ const VisualizerId = () => {
           ownerId: item.ownerId ?? userId ?? null,
           isPublic: item.isPublic ?? false,
         };
+        setProject(updatedItem);
 
-        const saved = await createProject({
-          item: updatedItem,
-          visibility: "private",
-        });
+        try {
+          const saved = await createProject({
+            item: updatedItem,
+            visibility: item.isPublic ? "public" : "private",
+          });
+          if (request.canceled) return;
 
-        if (saved) {
-          setProject(saved);
-          setCurrentImage(saved.renderedImage || result.renderedImage);
+          if (saved?.renderedImage) {
+            setProject(saved);
+            setCurrentImage(saved.renderedImage);
+          } else {
+            showNotice(
+              "Your render is ready, but couldn't be saved. Export it to keep a copy.",
+            );
+          }
+        } catch (error) {
+          console.error("Saving the render failed:", error);
+          if (!request.canceled) {
+            showNotice(
+              "Your render is ready, but couldn't be saved. Export it to keep a copy.",
+            );
+          }
         }
       }
     } catch (error) {
       console.error("Generation failed: ", error);
+      if (!request.canceled) {
+        const message = getErrorMessage(
+          error,
+          "We couldn't generate your 3D view. Please try again.",
+        );
+        setGenerationError(message);
+        showError(message);
+      }
     } finally {
-      setIsProcessing(false);
+      if (generationRequestRef.current === request) {
+        generationRequestRef.current = null;
+      }
+      if (!request.canceled) setIsProcessing(false);
     }
   };
 
@@ -80,10 +137,20 @@ const VisualizerId = () => {
       }
 
       setIsProjectLoading(true);
+      setProjectError(null);
+      setGenerationError(null);
+      setIsProcessing(false);
+      setProject(null);
+      setCurrentImage(null);
 
       const fetchedProject = await getProjectById({ id });
 
       if (!isMounted) return;
+      if (!fetchedProject) {
+        setProjectError(
+          "We couldn't load this project. Check that you're signed in, then try again.",
+        );
+      }
 
       setProject(fetchedProject);
       setCurrentImage(fetchedProject?.renderedImage || null);
@@ -96,7 +163,7 @@ const VisualizerId = () => {
     return () => {
       isMounted = false;
     };
-  }, [id]);
+  }, [id, reloadAttempt]);
 
   useEffect(() => {
     if (
@@ -140,6 +207,21 @@ const VisualizerId = () => {
 
             <div className="panel-actions">
               <Button
+                variant="outline"
+                size="sm"
+                onClick={() => project && void runGeneration(project)}
+                disabled={!project || isProcessing || isProjectLoading}
+              >
+                <RefreshCcw className="w-4 h-4 mr-2" />
+                {isProcessing
+                  ? "Generating..."
+                  : generationError
+                    ? "Try again"
+                    : currentImage
+                      ? "Regenerate"
+                      : "Generate 3D view"}
+              </Button>
+              <Button
                 size="sm"
                 onClick={handleExport}
                 className="export"
@@ -154,7 +236,34 @@ const VisualizerId = () => {
             </div>
           </div>
 
+          {generationError && (
+            <div
+              role="alert"
+              className="border-b border-red-200 bg-danger-soft px-5 py-4 text-sm text-danger"
+            >
+              <p className="font-semibold">The 3D render wasn't generated.</p>
+              <p className="mt-1">{generationError}</p>
+            </div>
+          )}
+
           <div className={`render-area ${isProcessing ? "is-processing" : ""}`}>
+            {isProjectLoading && (
+              <p role="status" className="p-6 text-sm text-zinc-600">
+                Loading floor plan...
+              </p>
+            )}
+            {projectError && (
+              <div role="alert" className="p-6 text-sm text-danger">
+                <p>{projectError}</p>
+                <Button
+                  size="sm"
+                  className="mt-4"
+                  onClick={() => setReloadAttempt((attempt) => attempt + 1)}
+                >
+                  Reload project
+                </Button>
+              </div>
+            )}
             {currentImage ? (
               <img src={currentImage} alt="AI Render" className="render-img" />
             ) : (

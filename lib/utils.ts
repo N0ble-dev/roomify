@@ -1,6 +1,26 @@
 export const HOSTING_CONFIG_KEY = "roomify_hosting_config";
 export const HOSTING_DOMAIN_SUFFIX = ".puter.site";
 
+export const getErrorMessage = (error: unknown, fallback: string): string => {
+  if (typeof error === "string" && error.trim()) return error;
+  if (error && typeof error === "object") {
+    const details = error as { message?: unknown; error?: unknown };
+    if (typeof details.message === "string" && details.message.trim()) {
+      return details.message;
+    }
+    if (typeof details.error === "string" && details.error.trim()) {
+      return details.error;
+    }
+    if (details.error && typeof details.error === "object") {
+      const nested = details.error as { message?: unknown };
+      if (typeof nested.message === "string" && nested.message.trim()) {
+        return nested.message;
+      }
+    }
+  }
+  return fallback;
+};
+
 export const isHostedUrl = (value: unknown): value is string =>
   typeof value === "string" && value.includes(HOSTING_DOMAIN_SUFFIX);
 

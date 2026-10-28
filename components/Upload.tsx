@@ -17,9 +17,10 @@ import {
 import { useSuccessToast } from "./toasts/SuccessToast";
 import { useNoticeToast } from "./toasts/NoticeToast";
 import { useErrorToast } from "./toasts/ErrorToast";
+import { getErrorMessage } from "../lib/utils";
 
 interface UploadProps {
-  onComplete: (base64: string) => void;
+  onComplete: (base64: string) => boolean | void | Promise<boolean | void>;
 }
 
 const Upload = ({ onComplete }: UploadProps) => {
@@ -144,14 +145,22 @@ const Upload = ({ onComplete }: UploadProps) => {
             timeoutRef.current = null;
             if (!signedInRef.current) return;
             try {
-              await onCompleteRef.current(base64);
+              const completed = await onCompleteRef.current(base64);
+              if (completed === false) {
+                throw new Error(
+                  "We couldn't save your floor plan. Please try again.",
+                );
+              }
               if (signedInRef.current) showSuccess("Your floor plan is ready.");
-            } catch {
+            } catch (error) {
               if (!signedInRef.current) return;
               setFile(null);
               setProgress(0);
               showUploadError(
-                "We couldn't continue with this image. Please try again.",
+                getErrorMessage(
+                  error,
+                  "We couldn't continue with this image. Please try again.",
+                ),
               );
             }
           }, REDIRECT_DELAY_MS);
