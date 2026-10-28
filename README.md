@@ -84,11 +84,18 @@ npm run dev
 
 Open [http://localhost:5173](http://localhost:5173). If that port is occupied, use the address printed in the terminal.
 
-The current home route is a placeholder and renders an empty page. Running the application starts the frontend foundation; the design workflow will become available as its features are implemented.
+The home page includes floor plan uploads and project history. Rendering requires a signed-in Puter account and a configured project worker.
 
 ### Configuration
 
-The current application does not require environment variables. Rendering credentials and worker endpoints will need to be documented when those integrations are added.
+Configure the app in `.env.local` with the deployed project worker URL and image model:
+
+| Variable | Purpose |
+| --- | --- |
+| `VITE_PUTER_WORKER_URL` | URL of the deployed Puter worker that saves and loads projects. |
+| `VITE_AI_IMAGE_MODEL` | Image-to-image model ID. Defaults to `gemini-3.1-flash-image`. |
+
+Restart the development server after changing these values. Puter manages authentication; no provider API key is required in the frontend. Image generation uses the signed-in user's Puter allowance.
 
 ## Available Commands
 

@@ -1,4 +1,6 @@
 export const PUTER_WORKER_URL = import.meta.env.VITE_PUTER_WORKER_URL || "";
+export const AI_IMAGE_MODEL =
+  import.meta.env.VITE_AI_IMAGE_MODEL?.trim() || "gemini-3.1-flash-image";
 
 // Storage Paths
 export const STORAGE_PATHS = {

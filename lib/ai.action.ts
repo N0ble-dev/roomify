@@ -1,5 +1,5 @@
 import puter from "@heyputer/puter.js";
-import { ROOMIFY_RENDER_PROMPT } from "./constants";
+import { AI_IMAGE_MODEL, ROOMIFY_RENDER_PROMPT } from "./constants";
 
 export const fetchAsDataUrl = async (url: string): Promise<string> => {
   const response = await fetch(url);
@@ -9,36 +9,40 @@ export const fetchAsDataUrl = async (url: string): Promise<string> => {
   }
 
   const blob = await response.blob();
+  if (!blob.size || (blob.type && !blob.type.startsWith("image/"))) {
+    throw new Error("The image service did not return a valid image.");
+  }
 
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onloadend = () => resolve(reader.result as string);
-    reader.onerror = reject;
+    reader.onload = () => {
+      if (typeof reader.result === "string") resolve(reader.result);
+      else reject(new Error("We couldn't read the generated image."));
+    };
+    reader.onerror = () =>
+      reject(reader.error || new Error("We couldn't read the generated image."));
+    reader.onabort = () => reject(new Error("Reading the image was canceled."));
     reader.readAsDataURL(blob);
   });
 };
 
 export const generate3DView = async ({ sourceImage }: Generate3DViewParams) => {
-  const dataUrl = sourceImage.startsWith("data:")
-    ? sourceImage
-    : await fetchAsDataUrl(sourceImage);
-
-  const base64Data = dataUrl.split(",")[1];
-  const mimeType = dataUrl.split(";")[0].split(":")[1];
-
-  if (!mimeType || !base64Data) throw new Error("Invalid source image payload");
+  if (!sourceImage.trim()) throw new Error("A floor plan image is required.");
 
   const response = await puter.ai.txt2img(ROOMIFY_RENDER_PROMPT, {
-    provider: "gemini",
-    model: "gemini-2.5-flash-image-preview",
-    input_image: base64Data,
-    input_image_mime_type: mimeType,
-    ratio: { w: 1024, h: 1024 },
+    model: AI_IMAGE_MODEL,
+    // Puter accepts hosted URLs and complete data URIs directly. This avoids
+    // a browser-side CORS fetch before the image-to-image request.
+    input_images: [sourceImage],
+    ratio: { w: 1, h: 1 },
+    quality: "1K",
   });
 
-  const rawImageUrl = (response as HTMLImageElement).src ?? null;
+  const rawImageUrl = response?.src;
 
-  if (!rawImageUrl) return { renderedImage: null, renderedPath: undefined };
+  if (!rawImageUrl) {
+    throw new Error("The image service returned no image. Please try again.");
+  }
 
   const renderedImage = rawImageUrl.startsWith("data:")
     ? rawImageUrl
